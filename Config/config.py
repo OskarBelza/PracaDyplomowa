@@ -5,6 +5,8 @@ BASE_PATH = 'C:/Users/oskar/PycharmProjects/pracaDyplomowa/data/IEMOCAP_full_rel
 MAP_PATH = 'C:/Users/oskar/PycharmProjects/pracaDyplomowa/data/IEMOCAP_data/EctractedData'
 FACE_PATH = 'C:/Users/oskar/PycharmProjects/pracaDyplomowa/data/IEMOCAP_data/Faces'
 SPECTROGRAM_PATH = 'C:/Users/oskar/PycharmProjects/pracaDyplomowa/data/IEMOCAP_data/Spectograms'
+FACE_PATHH5 = 'C:/Users/oskar/PycharmProjects/pracaDyplomowa/data/IEMOCAP_data/Faces.h5'
+SPECTROGRAM_PATHH5 = 'C:/Users/oskar/PycharmProjects/pracaDyplomowa/data/IEMOCAP_data/Spectograms.h5'
 MULTIMODAL_DATA_PATH = 'C:/Users/oskar/PycharmProjects/pracaDyplomowa/data/IEMOCAP_data/MultimodalData'
 
 
@@ -28,3 +30,9 @@ SPEC_THRESHOLD = 4
 
 # Debug mode:
 DEBUG = False
+
+# Emotion labels:
+CLASS_NAMES = ['Anger', 'Happiness', 'Excitement', 'Sadness', 'Frustration', 'Fear', 'Surprise', 'Neutral']
+
+# Batch size for training:
+BATCH_SIZE = 32

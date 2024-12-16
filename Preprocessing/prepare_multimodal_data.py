@@ -42,6 +42,8 @@ for session_dir in faces_dir.iterdir():
         for face_file in clip_dir.glob("*.jpg"):
             frame_number = int(face_file.stem.split('_')[-1])  # Extract frame number
             emotion = face_file.stem.split('_')[-2]  # Extract emotion label
+            if emotion not in emotions_dict:
+                continue  # Skip if emotion is not in the dictionary
             clip_data.append({
                 'frame_number': frame_number,
                 'face_path': str(face_file),

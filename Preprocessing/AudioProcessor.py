@@ -6,20 +6,20 @@ from Config import config
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 import logging
+import h5py
 
 # Set up logging configuration
 logging.basicConfig(level=logging.DEBUG if config.DEBUG else logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
-
 class AudioProcessor:
-    def __init__(self, spec_dir, base_dir, map_dir, fft_size=config.FFT_SIZE, step_size=config.STEP_SIZE,
+    def __init__(self, spec_h5_path, base_dir, map_dir, fft_size=config.FFT_SIZE, step_size=config.STEP_SIZE,
                  spec_threshold=config.SPEC_THRESHOLD, video_rate=config.VIDEO_RATE, debug=config.DEBUG):
         """
         Initialize the AudioProcessor with parameters for FFT and spectrogram generation.
 
         Args:
-            spec_dir (str): Directory to save spectrograms.
+            spec_h5_path (str): Path to save spectrograms in HDF5 format.
             base_dir (str): Base directory for the IEMOCAP dataset.
             map_dir (str): Directory containing extraction maps.
             fft_size (int): Window size for FFT.
@@ -28,7 +28,7 @@ class AudioProcessor:
             video_rate (int): Frame rate of the video.
             debug (bool): If True, enables debug messages.
         """
-        self.spec_dir = spec_dir
+        self.spec_h5_path = spec_h5_path
         self.base_dir = base_dir
         self.map_dir = map_dir
         self.fft_size = fft_size
@@ -123,52 +123,29 @@ class AudioProcessor:
 
         return specgram
 
-    def generate_spectrogram(self, audio_segments, metadata, output_dir):
+    def generate_spectrogram(self, audio_segments, metadata, h5_file):
         """
-        Generate spectrograms for audio segments and save them to a directory.
+        Generate spectrograms for audio segments and save them to an HDF5 file.
 
         Args:
             audio_segments (dict): Dictionary where keys are indices and values are lists of audio frames.
             metadata (pd.DataFrame): DataFrame containing speaker, identifier, and emotion metadata.
-            output_dir (str): Directory to save spectrograms.
+            h5_file (h5py.File): HDF5 file to save spectrograms.
         """
-        total_saved_spectrograms = 0
-        total_frame_difference = 0
-
         for dict_idx, segments in audio_segments.items():
             identifier = metadata['identifier'][dict_idx]
             emotion = metadata['emotion'][dict_idx]
-            first_frame = metadata['start_frame'][dict_idx]
-            last_frame = metadata['end_frame'][dict_idx]
+            group_name = f"{identifier}_{emotion}"
 
-            frame_difference = last_frame - first_frame + 1
-            if frame_difference < 0:
-                frame_difference = 0
-            total_frame_difference += frame_difference
-
-            directory_path = f"{output_dir}/{identifier}_{emotion}"
-            os.makedirs(directory_path, exist_ok=True)
-
-            saved_spectrograms_count = 0
+            if group_name not in h5_file:
+                h5_file.create_group(group_name)
 
             for idx, frame_data in enumerate(segments):
                 try:
                     spectrogram = self.pretty_spectrogram(frame_data.astype('float64'))
-
-                    output_path = f"{directory_path}/{identifier}_{emotion}_{idx}.npy"
-                    np.save(output_path, spectrogram)
-
-                    saved_spectrograms_count += 1
-                    total_saved_spectrograms += 1
-
+                    h5_file[group_name].create_dataset(str(idx), data=spectrogram, compression="gzip")
                 except Exception as e:
                     logging.error(f"Error generating spectrogram for frame {idx} in identifier {identifier}: {e}")
-
-            logging.debug(f"Saved {saved_spectrograms_count} spectrograms in directory: {directory_path}")
-            logging.debug(f"Frame difference for identifier '{identifier}': {frame_difference}, Saved spectrograms: {saved_spectrograms_count}")
-
-        logging.debug(f"Total frame difference across all directories: {total_frame_difference}")
-        logging.debug(f"Total saved spectrograms across all directories: {total_saved_spectrograms}")
 
     def extract_audio_segments_from_ranges(self, audio_path, start_frames, end_frames):
         """
@@ -207,18 +184,17 @@ class AudioProcessor:
         logging.info(f"Extracted {len(extracted_segments)} segments from audio file: {audio_path}")
         return extracted_segments
 
-    def process_audio_file(self, audio_file, session_num):
+    def process_audio_file(self, audio_file, session_num, h5_file):
         """
         Process a single audio file for a given session.
 
         Args:
             audio_file (str): Name of the audio file to process.
             session_num (int): Session number.
+            h5_file (h5py.File): HDF5 file to save spectrograms.
         """
         logging.info(f"Processing audio file: {audio_file} in session {session_num}")
         audio_path = f"{self.base_dir}/Session{session_num}/dialog/wav/{audio_file}"
-        spectrogram_dir = f"{self.spec_dir}/{audio_file[:-4]}"
-        os.makedirs(spectrogram_dir, exist_ok=True)
 
         map_path = f"{self.map_dir}/{audio_file[:-4]}.csv"
         if not os.path.exists(map_path):
@@ -231,37 +207,38 @@ class AudioProcessor:
 
         extracted_frames = self.extract_audio_segments_from_ranges(audio_path, start_frames, end_frames)
         if extracted_frames:
-            self.generate_spectrogram(extracted_frames, metadata, spectrogram_dir)
+            self.generate_spectrogram(extracted_frames, metadata, h5_file)
 
     def process_session_audio(self, n_session):
         """
-        Process all audio files in a session using multithreading.
+        Process all audio files in a session and save spectrograms to an HDF5 file.
 
         Args:
             n_session (int): Number of the session to process.
         """
-        for session_num in range(1, n_session + 1):
-            audio_path = f"{self.base_dir}/Session{session_num}/dialog/wav"
+        with h5py.File(self.spec_h5_path, 'w') as h5_file:
+            for session_num in range(1, n_session + 1):
+                audio_path = f"{self.base_dir}/Session{session_num}/dialog/wav"
 
-            if not os.path.exists(audio_path):
-                logging.error(f"Path {audio_path} does not exist, skipping session {session_num}.")
-                continue
+                if not os.path.exists(audio_path):
+                    logging.error(f"Path {audio_path} does not exist, skipping session {session_num}.")
+                    continue
 
-            audio_files = [file for file in os.listdir(audio_path) if file.endswith('.wav') and not file.startswith('._')]
+                audio_files = [file for file in os.listdir(audio_path) if file.endswith('.wav') and not file.startswith('._')]
 
-            logging.info(f"Starting audio processing for session {session_num} with {len(audio_files)} files.")
+                logging.info(f"Starting audio processing for session {session_num} with {len(audio_files)} files.")
 
-            with ThreadPoolExecutor() as executor:
-                futures = [executor.submit(self.process_audio_file, audio_file, session_num) for audio_file in audio_files]
-                for future in futures:
-                    future.result()
+                with ThreadPoolExecutor() as executor:
+                    futures = [executor.submit(self.process_audio_file, audio_file, session_num, h5_file) for audio_file in audio_files]
+                    for future in futures:
+                        future.result()
 
         logging.info(f"Completed processing for session {n_session}")
 
 
 # Instantiate and start processing sessions
 audio_processor = AudioProcessor(
-    spec_dir=config.SPECTROGRAM_PATH,
+    spec_h5_path=config.SPECTROGRAM_PATHH5,
     base_dir=config.BASE_PATH,
     map_dir=config.MAP_PATH,
     debug=config.DEBUG
