@@ -12,21 +12,22 @@ import logging
 logging.basicConfig(level=logging.DEBUG if config.DEBUG else logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
+
 class FaceProcessor:
-    def __init__(self, face_h5_path, base_dir, map_dir, y1=config.Y1, y2=config.Y2, x1=config.X1, x2=config.X2,
+    def __init__(self, output_dir, base_dir, map_dir, y1=config.Y1, y2=config.Y2, x1=config.X1, x2=config.X2,
                  y3=config.Y3, y4=config.Y4, x3=config.X3, x4=config.X4, face_size=config.IMAGE_SIZE, debug=config.DEBUG):
         """
         Initialize the FaceProcessor with directory paths and cropping coordinates.
 
         Args:
-            face_h5_path (str): Path to the HDF5 file to save cropped face images.
+            output_dir (str): Path to the output directory.
             base_dir (str): Directory containing video files.
             map_dir (str): Directory containing extraction maps.
             y1, y2, x1, x2, y3, y4, x3, x4: Coordinates for cropping frames based on speaker.
             face_size (int): Size of the cropped face images.
             debug (bool): If True, enables debug messages.
         """
-        self.face_h5_path = face_h5_path
+        self.output_dir = output_dir
         self.base_dir = base_dir
         self.map_dir = map_dir
         self.y1, self.y2, self.x1, self.x2 = y1, y2, x1, x2
@@ -90,69 +91,64 @@ class FaceProcessor:
         logging.info(f"Extracted frames for {len(extracted_frames)} ranges from video: {video_path}")
         return extracted_frames
 
-    def detect_face(self, frames_dict, metadata, h5_file):
+    def detect_face(self, frames_dict, metadata):
         """
         Detect faces in video frames, crop them, and save to an HDF5 file.
 
         Args:
             frames_dict (dict): Dictionary where keys are indices and values are lists of frames.
             metadata (pd.DataFrame): DataFrame containing speaker, identifier, and emotion metadata.
-            h5_file (h5py.File): HDF5 file handle to save cropped face images.
         """
-        logging.info("Starting face detection and saving to HDF5.")
+        logging.info("Starting face detection and saving to files.")
 
         for dict_idx, frames in frames_dict.items():
-            speaker = metadata['speaker'][dict_idx]
-            identifier = metadata['identifier'][dict_idx]
-            emotion = metadata['emotion'][dict_idx]
-            first_frame = metadata['start_frame'][dict_idx]
-            last_frame = metadata['end_frame'][dict_idx]
+            try:
+                speaker = metadata['speaker'][dict_idx]
+                identifier = metadata['identifier'][dict_idx]
+                emotion = metadata['emotion'][dict_idx]
 
-            group_name = f"{identifier}_{emotion}"
-            if group_name not in h5_file:
-                h5_file.create_group(group_name)
+                # Tworzymy katalog dla danej emocji, jeśli nie istnieje
+                emotion_dir = os.path.join(self.output_dir, emotion)
+                os.makedirs(emotion_dir, exist_ok=True)
 
-            for idx, frame in enumerate(frames):
-                try:
+                for idx, frame in enumerate(frames):
                     face = self.cut_frame(frame, speaker)
                     gray = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
                     faces = self.detector(gray, 1)
 
                     if len(faces) == 0:
-                        logging.debug(f"No faces detected in frame {idx} for identifier: {identifier}")
+                        logging.debug(f"Missing face in {idx} for {identifier}")
                         continue
 
-                    selected_face = None
-                    if len(faces) > 1:
-                        image_center = np.array((face.shape[1] // 2, face.shape[0] // 2))
-                        distances = [
-                            np.linalg.norm(
-                                np.array(((face_rect.left() + face_rect.right()) // 2,
-                                          (face_rect.top() + face_rect.bottom()) // 2)) - image_center)
-                            for face_rect in faces
-                        ]
-                        selected_face = faces[np.argmin(distances)]
-                    else:
-                        selected_face = faces[0]
+                    # Jeśli wykryto więcej niż jedną twarz, wybierz najbliższą środkowi obrazu
+                    selected_face = min(
+                        faces, key=lambda face_rect: np.linalg.norm(
+                            np.array([(face_rect.left() + face_rect.right()) // 2,
+                                      (face_rect.top() + face_rect.bottom()) // 2])
+                            - np.array((face.shape[1] // 2, face.shape[0] // 2))
+                        )
+                    )
 
-                    if selected_face:
-                        x, y, w, h = selected_face.left(), selected_face.top(), selected_face.width(), selected_face.height()
-                        cropped_face = face[max(0, y):max(0, y + h), max(0, x):max(0, x + w)]
-                        cropped_face = cv2.resize(cropped_face, (self.face_size, self.face_size))
+                    x, y, w, h = selected_face.left(), selected_face.top(), selected_face.width(), selected_face.height()
+                    cropped_face = face[max(0, y):max(0, y + h), max(0, x):max(0, x + w)]
+                    cropped_face = cv2.resize(cropped_face, (self.face_size, self.face_size))
 
-                        h5_file[group_name].create_dataset(str(idx), data=cropped_face, compression="gzip")
+                    # Zapis obrazu jako plik
+                    filename = f"{identifier}_{idx}.png"
+                    filepath = os.path.join(emotion_dir, filename)
+                    cv2.imwrite(filepath, cropped_face)
+                    logging.info(f"Saved in {filepath}")
 
-                except Exception as e:
-                    logging.exception(f"Error processing frame {idx} for identifier {identifier}: {e}")
+            except Exception as e:
+                logging.exception(f"Error loading file {idx} for {identifier}: {e}")
 
-    def process_video_file(self, video, session_num, h5_file):
+    def process_video_file(self, video, session_num):
         """
         Process a single video file for a given session.
 
         Args:
             video (str): Name of the video file to process.
             session_num (int): Session number.
-            h5_file (h5py.File): HDF5 file handle to save cropped face images.
         """
         video_path = f"{self.base_dir}/Session{session_num}/dialog/avi/DivX/{video}"
 
@@ -167,34 +163,39 @@ class FaceProcessor:
 
         extracted_frames = self.extract_frames_from_ranges(video_path, start_frames, end_frames)
         if extracted_frames:
-            self.detect_face(extracted_frames, metadata, h5_file)
+            self.detect_face(extracted_frames, metadata)
 
     def process_session(self, n_session):
         """
-        Process all videos in a session and save to HDF5 file.
+        Process all videos in a session and save.
 
         Args:
             n_session (int): Number of the session to process.
         """
-        with h5py.File(self.face_h5_path, 'w') as h5_file:
-            for session_num in range(1, n_session + 1):
-                video_path = f"{self.base_dir}/Session{session_num}/dialog/avi/DivX"
+        os.makedirs(self.output_dir, exist_ok=True)
 
-                if not os.path.exists(video_path):
-                    logging.error(f"Path {video_path} does not exist, skipping session {session_num}.")
-                    continue
+        for session_num in range(1, n_session + 1):
+            video_path = f"{self.base_dir}/Session{session_num}/dialog/avi/DivX"
 
-                videos = [file for file in os.listdir(video_path) if file.endswith('.avi') and not file.startswith('._')]
+            if not os.path.exists(video_path):
+                logging.error(f"Ścieżka {video_path} nie istnieje, pomijam sesję {session_num}.")
+                continue
 
-                with ThreadPoolExecutor(max_workers=4) as executor:
-                    futures = [executor.submit(self.process_video_file, video, session_num, h5_file) for video in videos]
-                    for future in futures:
-                        future.result()
+            videos = [file for file in os.listdir(video_path) if file.endswith('.avi') and not file.startswith('._')]
+
+            if not videos:
+                logging.warning(f"Brak plików wideo w {video_path}.")
+                continue
+
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = [executor.submit(self.process_video_file, video, session_num) for video in videos]
+                for future in futures:
+                    future.result()
 
 
 # Instantiate and start processing sessions
 face_processor = FaceProcessor(
-    face_h5_path=config.FACE_PATHH5,
+    output_dir=config.FACE_PATH,
     base_dir=config.BASE_PATH,
     map_dir=config.MAP_PATH,
     debug=config.DEBUG

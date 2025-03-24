@@ -3,10 +3,8 @@
 # Paths:
 BASE_PATH = 'C:/Users/oskar/PycharmProjects/pracaDyplomowa/data/IEMOCAP_full_release/IEMOCAP_full_release'
 MAP_PATH = 'C:/Users/oskar/PycharmProjects/pracaDyplomowa/data/IEMOCAP_data/EctractedData'
-FACE_PATH = 'C:/Users/oskar/PycharmProjects/pracaDyplomowa/data/IEMOCAP_data/Faces'
-SPECTROGRAM_PATH = 'C:/Users/oskar/PycharmProjects/pracaDyplomowa/data/IEMOCAP_data/Spectograms'
-FACE_PATHH5 = 'C:/Users/oskar/PycharmProjects/pracaDyplomowa/data/IEMOCAP_data/Faces.h5'
-SPECTROGRAM_PATHH5 = 'C:/Users/oskar/PycharmProjects/pracaDyplomowa/data/IEMOCAP_data/Spectograms.h5'
+FACE_PATH = 'C:/Users/oskar/PycharmProjects/pracaDyplomowa/data/IEMOCAP_data/Faces_classes'
+SPECTROGRAM_PATH = 'C:/Users/oskar/PycharmProjects/pracaDyplomowa/data/IEMOCAP_data/Spectograms_classes'
 MULTIMODAL_DATA_PATH = 'C:/Users/oskar/PycharmProjects/pracaDyplomowa/data/IEMOCAP_data/MultimodalData'
 
 

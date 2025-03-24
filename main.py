@@ -33,6 +33,7 @@ def train_model(model, dataloader, criterion, optimizer, device, num_epochs=10):
         accuracy = 100. * correct / total
         print(f"Epoch {epoch+1}/{num_epochs}, Loss: {epoch_loss:.4f}, Accuracy: {accuracy:.2f}%")
 
+
 # Example usage
 if __name__ == "__main__":
     # Create synthetic dataset
