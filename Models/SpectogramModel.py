@@ -1,38 +1,27 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from tensorflow.keras import models, layers
+from Config.config import SPECTROGRAM_HEIGHT, SPECTROGRAM_WIDTH
 
 
-class SpectrogramCNN(nn.Module):
-    def __init__(self, num_classes=8):
-        super(SpectrogramCNN, self).__init__()
+def create_spectrogram_model(input_shape=(SPECTROGRAM_HEIGHT, SPECTROGRAM_WIDTH, 3), num_classes=10):
+    model = models.Sequential([
+        layers.Conv2D(32, (3, 3), activation='relu', input_shape=input_shape),
+        layers.MaxPooling2D(),
 
-        # Convolutional layers
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
+        layers.Conv2D(64, (3, 3), activation='relu'),
+        layers.MaxPooling2D(),
 
-        # Pooling layer
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        layers.Conv2D(128, (3, 3), activation='relu'),
+        layers.MaxPooling2D(),
 
-        # Fully connected layers
-        self.fc1 = nn.Linear(128 * 28 * 28, 512)
-        self.fc2 = nn.Linear(512, num_classes)
+        layers.Flatten(),
+        layers.Dense(128, activation='relu'),
+        layers.Dropout(0.3),
+        layers.Dense(num_classes, activation='softmax')])
 
-        # Dropout layer for regularization
-        self.dropout = nn.Dropout(0.5)
+    model.compile(
+        optimizer='adam',
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy']
+    )
 
-    def forward(self, x):
-        # Convolutional and pooling layers
-        x = F.relu(self.conv1(x))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = self.pool(F.relu(self.conv3(x)))
-
-        # Flatten the tensor
-        x = x.view(x.size(0), -1)  # Flatten for fully connected layers
-
-        # Fully connected layers
-        x = F.relu(self.fc1(x))
-        x = self.dropout(x)
-        x = self.fc2(x)
-        return x
+    return model

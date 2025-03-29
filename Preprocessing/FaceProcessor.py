@@ -3,156 +3,107 @@ import cv2
 import dlib
 import numpy as np
 import pandas as pd
-import h5py
-from Config import config
-from concurrent.futures import ThreadPoolExecutor
 import logging
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor
+from Config import config
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG if config.DEBUG else logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
+# Global configuration
+BASE_DIR = config.BASE_PATH
+MAP_DIR = config.MAP_PATH
+OUTPUT_DIR = config.FACE_PATH
+FACE_SIZE = config.IMAGE_SIZE
+Y1, Y2, X1, X2 = config.Y1, config.Y2, config.X1, config.X2
+Y3, Y4, X3, X4 = config.Y3, config.Y4, config.X3, config.X4
 
-class FaceProcessor:
-    def __init__(self, output_dir, base_dir, map_dir, y1=config.Y1, y2=config.Y2, x1=config.X1, x2=config.X2,
-                 y3=config.Y3, y4=config.Y4, x3=config.X3, x4=config.X4, face_size=config.IMAGE_SIZE, debug=config.DEBUG):
-        """
-        Initialize the FaceProcessor with directory paths and cropping coordinates.
 
-        Args:
-            output_dir (str): Path to the output directory.
-            base_dir (str): Directory containing video files.
-            map_dir (str): Directory containing extraction maps.
-            y1, y2, x1, x2, y3, y4, x3, x4: Coordinates for cropping frames based on speaker.
-            face_size (int): Size of the cropped face images.
-            debug (bool): If True, enables debug messages.
-        """
-        self.output_dir = output_dir
-        self.base_dir = base_dir
-        self.map_dir = map_dir
-        self.y1, self.y2, self.x1, self.x2 = y1, y2, x1, x2
-        self.y3, self.y4, self.x3, self.x4 = y3, y4, x3, x4
-        self.face_size = face_size
-        self.debug = debug
-        self.detector = dlib.get_frontal_face_detector()
+def extract_frames_from_ranges(video_path, start_frames, end_frames):
+    """
+    Extract frames from a video based on given frame index ranges.
 
-    def cut_frame(self, frame, speaker):
-        """
-        Crop the frame based on the speaker's position.
+    This function loads the entire video into memory to avoid expensive frame-seeking
+    operations. It then slices the preloaded list of frames based on the provided
+    start and end frame indices.
 
-        Args:
-            frame (numpy.ndarray): The original frame.
-            speaker (str): The speaker's position ('L' for left, 'R' for right).
+    Args:
+        video_path (str): Path to the video file.
+        start_frames (list of int): List of start frame indices.
+        end_frames (list of int): List of end frame indices.
 
-        Returns:
-            numpy.ndarray: Cropped frame for the specified speaker.
-        """
-        if speaker == 'L':
-            return frame[self.y1:self.y2, self.x1:self.x2]
-        else:
-            return frame[self.y3:self.y4, self.x3:self.x4]
+    Returns:
+        dict: A dictionary where each key is the index of the range, and the value
+              is a list of frames within that range.
+    """
+    logging.info(f"Extracting frames from video: {video_path}")
+    cap = cv2.VideoCapture(video_path)
 
-    @staticmethod
-    def extract_frames_from_ranges(video_path, start_frames, end_frames):
-        """
-        Extract frames from a video based on given ranges.
+    if not cap.isOpened():
+        logging.error(f"Cannot open video: {video_path}")
+        return None
 
-        Args:
-            video_path (str): Path to the video file.
-            start_frames (list): List of start frame indices.
-            end_frames (list): List of end frame indices.
+    # Read all frames into memory
+    all_frames = []
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        all_frames.append(frame)
 
-        Returns:
-            dict: Dictionary where keys are range indices and values are lists of frames.
-        """
-        logging.info(f"Extracting frames from video: {video_path}")
-        cap = cv2.VideoCapture(video_path)
+    cap.release()
+    logging.info(f"Total frames loaded: {len(all_frames)}")
 
-        if not cap.isOpened():
-            logging.error(f"Cannot open video: {video_path}")
-            return None
+    # Slice loaded frames based on the requested ranges
+    extracted_frames = {}
+    for i, (start, end) in enumerate(zip(start_frames, end_frames)):
+        if end >= len(all_frames):
+            end = len(all_frames) - 1
+        if start >= len(all_frames):
+            continue
+        extracted_frames[i] = all_frames[start:end + 1]
 
-        extracted_frames = {}
-        for i, (start, end) in enumerate(zip(start_frames, end_frames)):
-            frames_in_range = []
-            cap.set(cv2.CAP_PROP_POS_FRAMES, start)
-            logging.debug(f"Processing frame range {start}-{end} from video: {video_path}")
+    return extracted_frames
 
-            for frame_idx in range(start, end + 1):
-                ret, frame = cap.read()
-                if not ret:
-                    logging.warning(f"Failed to read frame {frame_idx} from video: {video_path}")
-                    break
-                frames_in_range.append(frame)
 
-            extracted_frames[i] = frames_in_range
+def convert_and_trim_bb(image, rect):
+    """
+    Convert a dlib rectangle object to a bounding box tuple (x, y, width, height),
+    and ensure it stays within the image boundaries.
 
-        cap.release()
-        logging.info(f"Extracted frames for {len(extracted_frames)} ranges from video: {video_path}")
-        return extracted_frames
+    Args:
+        image (numpy.ndarray): The image in which the face was detected.
+        rect (dlib.rectangle): The face detection result from dlib.
 
-    def detect_face(self, frames_dict, metadata):
-        """
-        Detect faces in video frames, crop them, and save to an HDF5 file.
+    Returns:
+        tuple: Bounding box in (x, y, width, height) format.
+    """
+    startX = max(0, rect.left())
+    startY = max(0, rect.top())
+    endX = min(rect.right(), image.shape[1])
+    endY = min(rect.bottom(), image.shape[0])
+    return (startX, startY, endX - startX, endY - startY)
 
-        Args:
-            frames_dict (dict): Dictionary where keys are indices and values are lists of frames.
-            metadata (pd.DataFrame): DataFrame containing speaker, identifier, and emotion metadata.
-        """
-        logging.info("Starting face detection and saving to files.")
 
-        for dict_idx, frames in frames_dict.items():
-            try:
-                speaker = metadata['speaker'][dict_idx]
-                identifier = metadata['identifier'][dict_idx]
-                emotion = metadata['emotion'][dict_idx]
+def process_video_file(video, session_num):
+    """
+    Process a single video file by extracting frame ranges, detecting faces,
+    cropping them, and saving the results as individual image files categorized by emotion.
 
-                # Tworzymy katalog dla danej emocji, jeśli nie istnieje
-                emotion_dir = os.path.join(self.output_dir, emotion)
-                os.makedirs(emotion_dir, exist_ok=True)
+    Args:
+        video (str): The filename of the video to process.
+        session_num (int): The session number to determine the correct path.
+    """
+    try:
+        # Load the CNN face detector model from dlib
+        detector = dlib.cnn_face_detection_model_v1('../mmod_human_face_detector.dat')
 
-                for idx, frame in enumerate(frames):
-                    face = self.cut_frame(frame, speaker)
-                    gray = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
-                    faces = self.detector(gray, 1)
+        # Build paths to the video file and its corresponding map (CSV) file
+        video_path = f"{BASE_DIR}/Session{session_num}/dialog/avi/DivX/{video}"
+        map_path = f"{MAP_DIR}/{video[:-4]}.csv"
 
-                    if len(faces) == 0:
-                        logging.debug(f"Missing face in {idx} for {identifier}")
-                        continue
-
-                    # Jeśli wykryto więcej niż jedną twarz, wybierz najbliższą środkowi obrazu
-                    selected_face = min(
-                        faces, key=lambda face_rect: np.linalg.norm(
-                            np.array([(face_rect.left() + face_rect.right()) // 2,
-                                      (face_rect.top() + face_rect.bottom()) // 2])
-                            - np.array((face.shape[1] // 2, face.shape[0] // 2))
-                        )
-                    )
-
-                    x, y, w, h = selected_face.left(), selected_face.top(), selected_face.width(), selected_face.height()
-                    cropped_face = face[max(0, y):max(0, y + h), max(0, x):max(0, x + w)]
-                    cropped_face = cv2.resize(cropped_face, (self.face_size, self.face_size))
-
-                    # Zapis obrazu jako plik
-                    filename = f"{identifier}_{idx}.png"
-                    filepath = os.path.join(emotion_dir, filename)
-                    cv2.imwrite(filepath, cropped_face)
-                    logging.info(f"Saved in {filepath}")
-
-            except Exception as e:
-                logging.exception(f"Error loading file {idx} for {identifier}: {e}")
-
-    def process_video_file(self, video, session_num):
-        """
-        Process a single video file for a given session.
-
-        Args:
-            video (str): Name of the video file to process.
-            session_num (int): Session number.
-        """
-        video_path = f"{self.base_dir}/Session{session_num}/dialog/avi/DivX/{video}"
-
-        map_path = f"{self.map_dir}/{video[:-4]}.csv"
         if not os.path.exists(map_path):
             logging.error(f"Map {map_path} does not exist, skipping video {video}.")
             return
@@ -161,46 +112,80 @@ class FaceProcessor:
         start_frames = metadata['start_frame'].tolist()
         end_frames = metadata['end_frame'].tolist()
 
-        extracted_frames = self.extract_frames_from_ranges(video_path, start_frames, end_frames)
-        if extracted_frames:
-            self.detect_face(extracted_frames, metadata)
+        # Extract the required frame ranges from the video
+        extracted_frames = extract_frames_from_ranges(video_path, start_frames, end_frames)
+        if not extracted_frames:
+            return
 
-    def process_session(self, n_session):
-        """
-        Process all videos in a session and save.
+        for dict_idx, frames in extracted_frames.items():
+            speaker = metadata['speaker'][dict_idx]
+            identifier = metadata['identifier'][dict_idx]
+            emotion = metadata['emotion'][dict_idx]
 
-        Args:
-            n_session (int): Number of the session to process.
-        """
-        os.makedirs(self.output_dir, exist_ok=True)
+            emotion_dir = os.path.join(OUTPUT_DIR, emotion)
+            os.makedirs(emotion_dir, exist_ok=True)
 
-        for session_num in range(1, n_session + 1):
-            video_path = f"{self.base_dir}/Session{session_num}/dialog/avi/DivX"
+            for idx, frame in enumerate(frames):
+                # Crop the speaker's region from the frame
+                face = frame[Y1:Y2, X1:X2] if speaker == 'L' else frame[Y3:Y4, X3:X4]
 
-            if not os.path.exists(video_path):
-                logging.error(f"Ścieżka {video_path} nie istnieje, pomijam sesję {session_num}.")
-                continue
+                gray = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
+                faces = detector(gray, 1)
 
-            videos = [file for file in os.listdir(video_path) if file.endswith('.avi') and not file.startswith('._')]
+                if len(faces) == 0:
+                    logging.debug(f"Missing face in {idx} for {identifier}")
+                    continue
 
-            if not videos:
-                logging.warning(f"Brak plików wideo w {video_path}.")
-                continue
+                # Process each detected face bounding box
+                boxes = [convert_and_trim_bb(face, r.rect) for r in faces]
+                for (x, y, w, h) in boxes:
+                    # Crop and resize the face image
+                    cropped_face = cv2.resize(face[y:y + h, x:x + w], (FACE_SIZE, FACE_SIZE))
 
-            with ThreadPoolExecutor(max_workers=4) as executor:
-                futures = [executor.submit(self.process_video_file, video, session_num) for video in videos]
-                for future in futures:
-                    future.result()
+                    # Save the processed face image to file
+                    filename = f"{identifier}_{idx}.png"
+                    filepath = os.path.join(emotion_dir, filename)
+                    cv2.imwrite(filepath, cropped_face)
+                    logging.info(f"Saved in {filepath}")
+
+    except Exception as e:
+        logging.exception(f"Error loading file {video}: {e}")
 
 
-# Instantiate and start processing sessions
-face_processor = FaceProcessor(
-    output_dir=config.FACE_PATH,
-    base_dir=config.BASE_PATH,
-    map_dir=config.MAP_PATH,
-    debug=config.DEBUG
-)
+def process_session(n_session):
+    """
+    Process all video files within the specified number of sessions.
 
-face_processor.process_session(config.N_SESSIONS)
+    For each session, this function locates all video files in the expected directory,
+    then distributes their processing across multiple worker processes using
+    ProcessPoolExecutor. Each video is processed to detect and extract facial regions
+    from selected frame ranges and save them as categorized face image files.
 
-logging.info("Processing completed.")
+    Args:
+        n_session (int): Total number of sessions to process.
+    """
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    for session_num in range(2, n_session + 2):
+        video_path = f"{BASE_DIR}/Session{session_num}/dialog/avi/DivX"
+
+        if not os.path.exists(video_path):
+            logging.error(f"Ścieżka {video_path} nie istnieje, pomijam sesję {session_num}.")
+            continue
+
+        videos = [file for file in os.listdir(video_path) if file.endswith('.avi') and not file.startswith('._')]
+
+        if not videos:
+            logging.warning(f"Brak plików wideo w {video_path}.")
+            continue
+
+        with ProcessPoolExecutor(max_workers=8) as executor:
+            futures = [executor.submit(process_video_file, video, session_num) for video in videos]
+            for future in futures:
+                future.result()
+
+
+if __name__ == "__main__":
+    multiprocessing.freeze_support()
+    process_session(config.N_SESSIONS)
+    logging.info("Processing completed.")

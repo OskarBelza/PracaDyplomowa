@@ -1,32 +1,28 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from tensorflow.keras import models, layers
+from Config.config import FACE_IMAGE_SIZE
 
 
-class FaceCNN(nn.Module):
-    def __init__(self, embedding_size=128):
-        super(FaceCNN, self).__init__()
+def create_face_model(input_shape=(FACE_IMAGE_SIZE, FACE_IMAGE_SIZE, 3), num_classes=10):
 
-        # Convolutional layers
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
+    model = models.Sequential([
+        layers.Conv2D(32, (3, 3), activation='relu', input_shape=input_shape),
+        layers.MaxPooling2D(),
 
-        # Pooling layer
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        layers.Conv2D(64, (3, 3), activation='relu'),
+        layers.MaxPooling2D(),
 
-        # Fully connected layers
-        self.fc1 = nn.Linear(128 * 28 * 28, embedding_size)
+        layers.Conv2D(128, (3, 3), activation='relu'),
+        layers.MaxPooling2D(),
 
-    def forward(self, x):
-        # Convolutional and pooling layers
-        x = F.relu(self.conv1(x))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = self.pool(F.relu(self.conv3(x)))
+        layers.Flatten(),
+        layers.Dense(128, activation='relu'),
+        layers.Dropout(0.3),
+        layers.Dense(num_classes, activation='softmax')])
 
-        # Flatten the tensor
-        x = x.view(x.size(0), -1)  # Flatten for fully connected layers
+    model.compile(
+        optimizer='adam',
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy']
+    )
 
-        # Fully connected layer
-        x = self.fc1(x)
-        return x
+    return model

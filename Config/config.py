@@ -15,7 +15,9 @@ N_SESSIONS = 5
 VIDEO_RATE = 30
 
 # Image size for face detection:
-IMAGE_SIZE = 48
+FACE_IMAGE_SIZE = 96
+SPECTROGRAM_WIDTH = 24
+SPECTROGRAM_HEIGHT = 128
 
 # Values for face cropping:
 Y1, Y2, Y3, Y4 = 130, 330, 130, 330
@@ -32,5 +34,10 @@ DEBUG = False
 # Emotion labels:
 CLASS_NAMES = ['Anger', 'Happiness', 'Excitement', 'Sadness', 'Frustration', 'Fear', 'Surprise', 'Neutral']
 
+CLASS_SHORTCUTS_6 = ['ang', 'exc', 'fru', 'hap', 'neu', 'sad']
+CLASS_SHORTCUTS_10 = ['ang', 'dis', 'exc', 'fea', 'fru', 'hap', 'neu', 'oth', 'sad', 'sur']
+
 # Batch size for training:
 BATCH_SIZE = 32
+
+

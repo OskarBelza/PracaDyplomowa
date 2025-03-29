@@ -5,6 +5,7 @@ import cv2
 import Config.config
 
 
+# Obsolete
 def plot_class_distribution(csv_path, label_column, class_names=None):
     """
     Plots the distribution of classes from a CSV file.

@@ -1,62 +1,38 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from torch.utils.data import DataLoader
-from Models.MultiModalModel import MultiModalModel
+from Models.FaceModel import create_face_model
+from Models.SpectogramModel import create_spectrogram_model
+from Utility.load_data import load_spectrogram_dataset, load_face_dataset
+from tensorflow.keras import layers
+from sklearn.metrics import classification_report, balanced_accuracy_score
+import cv2 as cv
+from Utility.visualization import plot_spectrograms_from_tf_dataset
+from Config.config import CLASS_NAMES
 
 
-def train_model(model, dataloader, criterion, optimizer, device, num_epochs=10):
-    model.to(device)
-    for epoch in range(num_epochs):
-        model.train()
-        running_loss = 0.0
-        correct = 0
-        total = 0
 
-        for batch in dataloader:
-            face_inputs, spec_inputs, labels = batch
-            face_inputs, spec_inputs, labels = face_inputs.to(device), spec_inputs.to(device), labels.to(device)
+# Tworzenie modeli
+#face_model = create_face_model()
+spectrogram_model = create_spectrogram_model()
 
-            optimizer.zero_grad()
-            outputs = model(face_inputs, spec_inputs)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-
-            running_loss += loss.item()
-            _, predicted = outputs.max(1)
-            total += labels.size(0)
-            correct += predicted.eq(labels).sum().item()
-
-        epoch_loss = running_loss / len(dataloader)
-        accuracy = 100. * correct / total
-        print(f"Epoch {epoch+1}/{num_epochs}, Loss: {epoch_loss:.4f}, Accuracy: {accuracy:.2f}%")
+# Podsumowanie
+#face_model.summary()
+spectrogram_model.summary()
 
 
-# Example usage
-if __name__ == "__main__":
-    # Create synthetic dataset
-    class SyntheticDataset(torch.utils.data.Dataset):
-        def __init__(self, num_samples=100):
-            self.num_samples = num_samples
-            self.face_data = torch.randn(num_samples, 3, 112, 112)  # Face images
-            self.spec_data = torch.randn(num_samples, 1, 112, 112)  # Spectrograms
-            self.labels = torch.randint(0, 8, (num_samples,))
+# Wczytanie danych
+#face_train_ds, face_val_ds, face_classes = load_face_dataset(batch_size=128)
+spec_train_ds, spec_val_ds, spec_classes = load_spectrogram_dataset(batch_size=128)
 
-        def __len__(self):
-            return self.num_samples
+# Wizualizacja
+plot_spectrograms_from_tf_dataset(spec_train_ds, CLASS_NAMES, num_images=12)
 
-        def __getitem__(self, idx):
-            return self.face_data[idx], self.spec_data[idx], self.labels[idx]
+# Trenowanie modeli
+#history = face_model.fit(face_train_ds, validation_data=face_val_ds, epochs=10)
+spectrogram_model.fit(spec_train_ds, validation_data=spec_val_ds, epochs=10)
 
-    # Initialize model, dataset, dataloader, criterion, and optimizer
-    model = MultiModalModel(face_embedding_size=128, spec_embedding_size=128, num_classes=8)
-    dataset = SyntheticDataset()
-    dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+# Zapisać model
+#face_model.save('face_model.keras')
+spectrogram_model.save('spectrogram_model.h5')
 
-    # Train model
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    train_model(model, dataloader, criterion, optimizer, device, num_epochs=10)
+#report = classification_report(face_val_ds, face_model.predict(face_val_ds), )
+#print(report)
+

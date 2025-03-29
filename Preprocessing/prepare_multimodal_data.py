@@ -2,6 +2,8 @@ import pandas as pd
 from pathlib import Path
 from Config import config
 
+
+# Obsolete
 # Mapping emotions to numeric labels
 emotions_dict = {
     'ang': 0,  # Anger

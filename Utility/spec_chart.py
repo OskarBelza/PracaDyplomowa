@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+# Obsolete
 def visualize_and_save_spectrogram(file_path, save_path=None):
     """
     Visualize and optionally save a spectrogram file.
