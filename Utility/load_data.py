@@ -1,114 +1,109 @@
+from sklearn.model_selection import train_test_split
 import tensorflow as tf
-from Config.config import (FACE_PATH, SPECTROGRAM_PATH, CLASS_SHORTCUTS_10, CLASS_SHORTCUTS_6, SPECTROGRAM_HEIGHT,
-                           SPECTROGRAM_WIDTH, FACE_IMAGE_SIZE)
-from tensorflow.keras import layers
+import os
+from Config.config import FACE_SIZE, SPECTROGRAM_SIZE, BATCH_SIZE
 
 
-def preprocess(train_ds, val_ds):
-    normalization_layer = layers.Rescaling(1. / 255)
-    train_ds = train_ds.map(lambda x, y: (normalization_layer(x), y))
-    val_ds = val_ds.map(lambda x, y: (normalization_layer(x), y))
-
-    return train_ds, val_ds
-
-
-def load_face_dataset(face_dir=FACE_PATH, img_size=(FACE_IMAGE_SIZE, FACE_IMAGE_SIZE), batch_size=64,
-                      validation_split=0.2, seed=42):
+def get_image_paths_and_labels(base_dir):
     """
-    Loads face images into TensorFlow datasets, splitting into training and validation sets.
-
-    Args:
-        face_dir (str): Directory containing face images categorized by emotion.
-        img_size (tuple): Target image size (width, height).
-        batch_size (int): Batch size for training.
-        validation_split (float): Percentage of data for validation.
-        seed (int): Random seed for reproducibility.
+    Retrieves image file paths and their corresponding labels from a directory structure:
+    base_dir/class_name/image.png
 
     Returns:
-        train_ds (tf.data.Dataset): Training dataset.
-        val_ds (tf.data.Dataset): Validation dataset.
-        class_names (list): List of emotion class labels.
+        file_paths: list of image paths
+        labels: list of integer labels
+        class_names: sorted list of class names
     """
-
-    class_names = CLASS_SHORTCUTS_6
-
-    # Load dataset with `image_dataset_from_directory`
-    train_ds = tf.keras.utils.image_dataset_from_directory(
-        face_dir,
-        labels="inferred",
-        label_mode="int",
-        batch_size=batch_size,
-        image_size=img_size,
-        class_names=class_names,
-        validation_split=validation_split,
-        subset="training",
-        seed=seed
-    )
-
-    val_ds = tf.keras.utils.image_dataset_from_directory(
-        face_dir,
-        labels="inferred",
-        label_mode="int",
-        batch_size=batch_size,
-        image_size=img_size,
-        class_names=class_names,
-        validation_split=validation_split,
-        subset="validation",
-        seed=seed
-    )
-
-    train_ds, val_ds = preprocess(train_ds, val_ds)
-    return train_ds, val_ds, class_names
+    file_paths, labels = [], []
+    class_names = sorted([
+        d for d in os.listdir(base_dir)
+        if os.path.isdir(os.path.join(base_dir, d))
+    ])
+    for label_idx, class_name in enumerate(class_names):
+        class_dir = os.path.join(base_dir, class_name)
+        for file_name in os.listdir(class_dir):
+            path = os.path.join(class_dir, file_name)
+            if os.path.isfile(path):
+                file_paths.append(path)
+                labels.append(label_idx)
+    return file_paths, labels, class_names
 
 
-def load_spectrogram_dataset(spec_dir=SPECTROGRAM_PATH, img_size=(SPECTROGRAM_HEIGHT, SPECTROGRAM_WIDTH), batch_size=64,
-                              validation_split=0.2, seed=42):
+def process(face_path, spec_path, label):
     """
-    Loads spectrogram images into TensorFlow datasets, splitting into training and validation sets.
-
-    Args:
-        spec_dir (str): Directory containing spectrogram images categorized by emotion.
-        img_size (tuple): Target image size (width, height).
-        batch_size (int): Batch size for training.
-        validation_split (float): Percentage of data for validation.
-        seed (int): Random seed for reproducibility.
+    Loads and preprocesses a face image and its corresponding spectrogram.
 
     Returns:
-        train_ds (tf.data.Dataset): Training dataset.
-        val_ds (tf.data.Dataset): Validation dataset.
-        class_names (list): List of emotion class labels.
+        A tuple ((spectrogram_tensor, face_tensor), label)
     """
+    face = tf.io.read_file(face_path)
+    face = tf.image.decode_png(face, channels=3)
+    face = tf.image.resize(face, (FACE_SIZE, FACE_SIZE))
+    face = tf.cast(face, tf.float32) / 255.0
 
-    class_names = CLASS_SHORTCUTS_6
+    spec = tf.io.read_file(spec_path)
+    spec = tf.image.decode_png(spec, channels=3)
+    spec = tf.image.resize(spec, (SPECTROGRAM_SIZE, SPECTROGRAM_SIZE))
+    spec = tf.cast(spec, tf.float32) / 255.0
 
-    train_ds = tf.keras.utils.image_dataset_from_directory(
-        spec_dir,
-        labels="inferred",
-        label_mode="int",
-        batch_size=batch_size,
-        image_size=img_size,
-        class_names=class_names,
-        validation_split=validation_split,
-        subset="training",
-        seed=seed
+    return (spec, face), label
+
+
+def build_dataset(face_paths, spec_paths, labels, shuffle=False):
+    """
+    Builds a tf.data.Dataset from lists of face and spectrogram paths and labels.
+
+    Args:
+        face_paths: list of face image file paths
+        spec_paths: list of spectrogram image file paths
+        labels: list of integer labels
+        shuffle: whether to shuffle the dataset
+
+    Returns:
+        tf.data.Dataset: batched and prefetched
+    """
+    dataset = tf.data.Dataset.from_tensor_slices((face_paths, spec_paths, labels))
+    dataset = dataset.map(process, num_parallel_calls=tf.data.AUTOTUNE)
+    if shuffle:
+        dataset = dataset.shuffle(buffer_size=len(face_paths))
+    return dataset.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
+
+
+def load_paired_dataset(face_dir, spec_dir, validation_split=0.15, test_split=0.15, seed=42):
+    """
+    Loads and splits a paired dataset of face images and spectrograms into train/val/test.
+
+    Args:
+        face_dir: root directory containing face images organized by class
+        spec_dir: root directory containing spectrograms mirroring face_dir structure
+        validation_split: proportion of validation samples
+        test_split: proportion of test samples
+        seed: random seed for reproducibility
+
+    Returns:
+        train_dataset, val_dataset, test_dataset, class_names
+    """
+    # Load paths and labels
+    face_paths, labels, class_names = get_image_paths_and_labels(face_dir)
+    spec_paths = [
+        os.path.join(spec_dir, os.path.relpath(fp, face_dir)) for fp in face_paths
+    ]
+
+    # First, split off the test set
+    face_temp, face_test, spec_temp, spec_test, labels_temp, labels_test = train_test_split(
+        face_paths, spec_paths, labels, test_size=test_split, stratify=labels, random_state=seed
     )
 
-    val_ds = tf.keras.utils.image_dataset_from_directory(
-        spec_dir,
-        labels="inferred",
-        label_mode="int",
-        batch_size=batch_size,
-        image_size=img_size,
-        class_names=class_names,
-        validation_split=validation_split,
-        subset="validation",
-        seed=seed
+    # Then, split the remaining data into train and validation
+    val_split_relative = validation_split / (1.0 - test_split)
+    face_train, face_val, spec_train, spec_val, labels_train, labels_val = train_test_split(
+        face_temp, spec_temp, labels_temp, test_size=val_split_relative,
+        stratify=labels_temp, random_state=seed
     )
 
-    #train_ds, val_ds = preprocess(train_ds, val_ds)
-    return train_ds, val_ds, class_names
+    # Build datasets
+    train_dataset = build_dataset(face_train, spec_train, labels_train)
+    val_dataset = build_dataset(face_val, spec_val, labels_val)
+    test_dataset = build_dataset(face_test, spec_test, labels_test)
 
-
-#face_train_ds, face_val_ds, face_classes = load_face_dataset(batch_size=128)
-#spec_train_ds, spec_val_ds, spec_classes = load_spectrogram_dataset(batch_size=128)
-
+    return train_dataset, val_dataset, test_dataset, class_names

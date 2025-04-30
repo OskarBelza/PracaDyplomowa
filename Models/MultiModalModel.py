@@ -1,32 +1,37 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from Models.SpectogramModel import SpectrogramCNN
-from Models.FaceModel import FaceCNN
+from tensorflow.keras import layers, models
+from Config.config import NUM_CLASSES
 
 
-class MultiModalModel(nn.Module):
-    def __init__(self, face_embedding_size=128, spec_embedding_size=128, num_classes=10):
-        super(MultiModalModel, self).__init__()
-        self.face_cnn = SpectrogramCNN()
-        self.spec_cnn = FaceCNN(embedding_size=spec_embedding_size)
+def build_multimodal_model(audio_model, visual_model, num_classes=NUM_CLASSES):
+    # Wejścia
+    audio_input = audio_model.input
+    visual_input = visual_model.input
 
-        # Fully connected layers for combined embeddings
-        self.fc1 = nn.Linear(face_embedding_size + spec_embedding_size, 256)
-        self.fc2 = nn.Linear(256, num_classes)
+    # Wyjścia strumieni
+    audio_feat = audio_model.output  # (None, 128)
+    visual_feat = visual_model.output  # (None, 128)
 
-        # Dropout layer for regularization
-        self.dropout = nn.Dropout(0.5)
+    # Konkatenacja cech dla obliczenia wag (ale bez softmax)
+    concat_for_gating = layers.Concatenate()([audio_feat, visual_feat])
 
-    def forward(self, face_input, spec_input):
-        face_embedding = self.face_cnn(face_input)
-        spec_embedding = self.spec_cnn(spec_input)
+    # Multiplicative gating: osobne skalarne wagi dla audio i visual
+    gating_dense = layers.Dense(2, activation='sigmoid', name="modality_gate")(concat_for_gating)
 
-        # Concatenate embeddings
-        combined = torch.cat((face_embedding, spec_embedding), dim=1)
+    gate_audio = layers.Lambda(lambda x: x[:, 0:1])(gating_dense)
+    gate_visual = layers.Lambda(lambda x: x[:, 1:2])(gating_dense)
 
-        # Fully connected layers
-        x = F.relu(self.fc1(combined))
-        x = self.dropout(x)
-        x = self.fc2(x)
-        return x
+    # Wektorowe ważenie modalności
+    audio_weighted = layers.Multiply()([audio_feat, gate_audio])
+    visual_weighted = layers.Multiply()([visual_feat, gate_visual])
+
+    # Sumowanie cech
+    fused = layers.Add()([audio_weighted, visual_weighted])
+    fused = layers.Dense(128, activation='relu')(fused)
+    fused = layers.Dropout(0.4)(fused)
+
+    # Wyjście klasyfikacyjne
+    output = layers.Dense(num_classes, activation='softmax', name='emotion_output')(fused)
+
+    # Finalny model
+    model = models.Model(inputs=[audio_input, visual_input], outputs=output, name="MultimodalEmotionModelMultiplicative")
+    return model

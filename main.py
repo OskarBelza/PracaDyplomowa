@@ -1,38 +1,29 @@
-from Models.FaceModel import create_face_model
-from Models.SpectogramModel import create_spectrogram_model
-from Utility.load_data import load_spectrogram_dataset, load_face_dataset
-from tensorflow.keras import layers
-from sklearn.metrics import classification_report, balanced_accuracy_score
-import cv2 as cv
-from Utility.visualization import plot_spectrograms_from_tf_dataset
-from Config.config import CLASS_NAMES
+from Models.SpectogramModel import build_audio_model
+from Models.FaceModel import build_visual_model
+from Models.MultiModalModel import build_multimodal_model
+from Utility.load_data import load_paired_dataset
+from Config.config import SPECTROGRAM_PATH, FACE_PATH, OUTPUT_PATH, BATCH_SIZE, EPOCHS
+from Utility.evaluate import evaluate_multimodal_model
 
 
+audio_model = build_audio_model()
+visual_model = build_visual_model()
+model = build_multimodal_model(audio_model, visual_model)
 
-# Tworzenie modeli
-#face_model = create_face_model()
-spectrogram_model = create_spectrogram_model()
+model.compile(
+    optimizer='adam',
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
 
-# Podsumowanie
-#face_model.summary()
-spectrogram_model.summary()
+train_dataset, val_dataset, test_dataset, class_names = load_paired_dataset(
+    face_dir=FACE_PATH,
+    spec_dir=SPECTROGRAM_PATH,
+    validation_split=0.15,
+    test_split=0.15,
+)
 
+model.fit(train_dataset, validation_data=val_dataset, batch_size=BATCH_SIZE, epochs=EPOCHS)
+model.save(f'{OUTPUT_PATH}/multimodal_model_multiplicative.keras')
 
-# Wczytanie danych
-#face_train_ds, face_val_ds, face_classes = load_face_dataset(batch_size=128)
-spec_train_ds, spec_val_ds, spec_classes = load_spectrogram_dataset(batch_size=128)
-
-# Wizualizacja
-plot_spectrograms_from_tf_dataset(spec_train_ds, CLASS_NAMES, num_images=12)
-
-# Trenowanie modeli
-#history = face_model.fit(face_train_ds, validation_data=face_val_ds, epochs=10)
-spectrogram_model.fit(spec_train_ds, validation_data=spec_val_ds, epochs=10)
-
-# Zapisać model
-#face_model.save('face_model.keras')
-spectrogram_model.save('spectrogram_model.h5')
-
-#report = classification_report(face_val_ds, face_model.predict(face_val_ds), )
-#print(report)
-
+evaluate_multimodal_model(model, test_dataset, class_names, output_path=f"{OUTPUT_PATH}/evaluation_report.txt")

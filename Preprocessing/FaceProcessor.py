@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.DEBUG if config.DEBUG else logging.INFO,
 BASE_DIR = config.BASE_PATH
 MAP_DIR = config.MAP_PATH
 OUTPUT_DIR = config.FACE_PATH
-FACE_SIZE = config.IMAGE_SIZE
+FACE_SIZE = config.FACE_IMAGE_SIZE
 Y1, Y2, X1, X2 = config.Y1, config.Y2, config.X1, config.X2
 Y3, Y4, X3, X4 = config.Y3, config.Y4, config.X3, config.X4
 
@@ -166,20 +166,20 @@ def process_session(n_session):
     """
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    for session_num in range(2, n_session + 2):
+    for session_num in range(1, n_session + 1):
         video_path = f"{BASE_DIR}/Session{session_num}/dialog/avi/DivX"
 
         if not os.path.exists(video_path):
-            logging.error(f"Ścieżka {video_path} nie istnieje, pomijam sesję {session_num}.")
+            logging.error(f"Directory {video_path} not found, skipping session {session_num}.")
             continue
 
         videos = [file for file in os.listdir(video_path) if file.endswith('.avi') and not file.startswith('._')]
 
         if not videos:
-            logging.warning(f"Brak plików wideo w {video_path}.")
+            logging.warning(f"No files found in {video_path}.")
             continue
 
-        with ProcessPoolExecutor(max_workers=8) as executor:
+        with ProcessPoolExecutor(max_workers=4) as executor:
             futures = [executor.submit(process_video_file, video, session_num) for video in videos]
             for future in futures:
                 future.result()

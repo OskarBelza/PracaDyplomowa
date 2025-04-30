@@ -1,28 +1,22 @@
 from tensorflow.keras import models, layers
-from Config.config import FACE_IMAGE_SIZE
+from Config.config import FACE_SIZE
 
 
-def create_face_model(input_shape=(FACE_IMAGE_SIZE, FACE_IMAGE_SIZE, 3), num_classes=10):
+def build_visual_model(frame_shape=(FACE_SIZE, FACE_SIZE, 3)):
+    # Wejście: pojedyncza klatka
+    inputs = layers.Input(shape=frame_shape, name='video_input')
 
-    model = models.Sequential([
-        layers.Conv2D(32, (3, 3), activation='relu', input_shape=input_shape),
-        layers.MaxPooling2D(),
+    x = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(inputs)
+    x = layers.MaxPooling2D((2, 2))(x)
 
-        layers.Conv2D(64, (3, 3), activation='relu'),
-        layers.MaxPooling2D(),
+    x = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(x)
+    x = layers.MaxPooling2D((2, 2))(x)
 
-        layers.Conv2D(128, (3, 3), activation='relu'),
-        layers.MaxPooling2D(),
+    x = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(x)
+    x = layers.MaxPooling2D((2, 2))(x)
 
-        layers.Flatten(),
-        layers.Dense(128, activation='relu'),
-        layers.Dropout(0.3),
-        layers.Dense(num_classes, activation='softmax')])
+    x = layers.Flatten()(x)
+    x = layers.Dense(128, activation='relu')(x)
+    x = layers.Dropout(0.3)(x)
 
-    model.compile(
-        optimizer='adam',
-        loss='sparse_categorical_crossentropy',
-        metrics=['accuracy']
-    )
-
-    return model
+    return models.Model(inputs, x, name="VisualBranch")
