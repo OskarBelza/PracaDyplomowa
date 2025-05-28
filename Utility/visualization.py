@@ -13,11 +13,12 @@ enable_unsafe_deserialization()
 
 def plot_class_distribution(class_distribution, output_path):
     """
-    Funkcja wizualizuje liczność klas emocji w zbiorze danych wejściowych oddzielnie dla modalności
-    wizualnej (obrazy twarzy) i akustycznej (spektrogramy).
+    Visualizes the number of emotion class samples in the input dataset,
+    separately for each modality: visual (face images) and acoustic (audio spectrograms).
 
-    Parametry:
-        class_distribution (dict): słownik z licznością próbek dla każdej klasy osobno dla twarzy i dźwięku.
+    Parameters:
+        class_distribution (dict): Dictionary with sample counts for each class,
+                                   separately for face and audio modalities.
     """
     labels = list(class_distribution.keys())
     face_counts = [class_distribution[label]["face"] for label in labels]
@@ -27,11 +28,11 @@ def plot_class_distribution(class_distribution, output_path):
     width = 0.35
 
     plt.figure(figsize=(12, 6))
-    plt.bar(x, face_counts, width=width, label='Obrazy twarzy')
-    plt.bar([i + width for i in x], audio_counts, width=width, label='Spektrogramy audio')
+    plt.bar(x, face_counts, width=width, label='Face images')
+    plt.bar([i + width for i in x], audio_counts, width=width, label='Audio spectrograms')
     plt.xticks([i + width / 2 for i in x], labels, rotation=45)
-    plt.ylabel("Liczba próbek")
-    plt.title("Rozkład klas emocji (twarz vs. audio)")
+    plt.ylabel("Number of samples")
+    plt.title("Emotion Class Distribution (Face vs. Audio)")
     plt.legend()
     plt.tight_layout()
     plt.savefig(output_path, dpi=300)
@@ -40,13 +41,13 @@ def plot_class_distribution(class_distribution, output_path):
 
 def plot_confusion_matrix(y_true, y_pred, output_path, labels=None, normalize='true'):
     """
-    Funkcja generuje i wyświetla macierz pomyłek na podstawie etykiet rzeczywistych i predykcji modelu.
+    Generates and displays a confusion matrix based on true labels and model predictions.
 
-    Parametry:
-        y_true (List[int]): rzeczywiste etykiety klas.
-        y_pred (List[int]): przewidziane etykiety klas przez model.
-        labels (List[str]): lista etykiet klas do podpisania osi.
-        normalize (str): sposób normalizacji ('true' = normalizacja po wierszach).
+    Parameters:
+        y_true (List[int]): Ground truth class labels.
+        y_pred (List[int]): Predicted class labels from the model.
+        labels (List[str]): Optional list of class names for axis labeling.
+        normalize (str): Normalization method ('true' = normalize per row).
     """
     cm = confusion_matrix(y_true, y_pred, normalize=normalize)
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
@@ -54,6 +55,7 @@ def plot_confusion_matrix(y_true, y_pred, output_path, labels=None, normalize='t
     plt.title("Confusion Matrix")
     plt.savefig(output_path, dpi=300)
     plt.show()
+
 
 
 """

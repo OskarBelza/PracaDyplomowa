@@ -4,51 +4,51 @@ from Config.config import NUM_CLASSES
 
 def build_multimodal_model(audio_model, visual_model, num_classes=NUM_CLASSES):
     """
-    Buduje multimodalny model do klasyfikacji emocji na podstawie sygnałów audio i wizualnych,
-    wykorzystujący mechanizm multiplicative gating do ważenia modalności.
+    Builds a multimodal emotion classification model that combines audio and visual features,
+    using a multiplicative gating mechanism to weight each modality dynamically.
 
-    Parametry:
-        audio_model (tf.keras.Model): Wytrenowany lub bazowy model przetwarzający dane audio.
-        visual_model (tf.keras.Model): Wytrenowany lub bazowy model przetwarzający dane wizualne (obrazy twarzy).
-        num_classes (int): Liczba klas emocji do klasyfikacji.
+    Parameters:
+        audio_model (tf.keras.Model): Pretrained or base model processing audio input.
+        visual_model (tf.keras.Model): Pretrained or base model processing visual input (face images).
+        num_classes (int): Number of emotion classes to classify.
 
-    Zwraca:
-        tf.keras.Model: Kompozytowy model multimodalny.
+    Returns:
+        tf.keras.Model: Composite multimodal classification model.
     """
 
-    # Wejścia z modeli unimodalnych
+    # Inputs from unimodal models
     audio_input = audio_model.input
     visual_input = visual_model.input
 
-    # Ekstrahowane cechy z obu modalności
+    # Extracted features from both modalities
     audio_feat = audio_model.output
     visual_feat = visual_model.output
 
-    # Połączenie cech z obu źródeł do wyliczenia wag (bramek)
+    # Concatenate features to compute modality gating weights
     concat_for_gating = layers.Concatenate()([audio_feat, visual_feat])
 
-    # Warstwa gęsta generująca dwuwymiarowe bramki (dla audio i wideo), z aktywacją sigmoidalną
+    # Dense layer that outputs two gating values (audio and video), with sigmoid activation
     gating_dense = layers.Dense(2, activation='sigmoid', name="modality_gate")(concat_for_gating)
 
-    # Wydzielenie wag dla poszczególnych modalności (kształt: [batch_size, 1])
+    # Split the gating weights for each modality (shape: [batch_size, 1])
     gate_audio = layers.Lambda(lambda x: x[:, 0:1])(gating_dense)
     gate_visual = layers.Lambda(lambda x: x[:, 1:2])(gating_dense)
 
-    # Zastosowanie wag do cech audio i wizualnych (skalowanie cech)
+    # Apply gating weights to modality features (scale features)
     audio_weighted = layers.Multiply()([audio_feat, gate_audio])
     visual_weighted = layers.Multiply()([visual_feat, gate_visual])
 
-    # Fuzja zważonych cech przez dodawanie
+    # Fuse gated features using addition
     fused = layers.Add()([audio_weighted, visual_weighted])
 
-    # Gęsta warstwa transformująca przestrzeń cech przed klasyfikacją
+    # Dense transformation before classification
     fused = layers.Dense(128, activation='relu')(fused)
     fused = layers.Dropout(0.4)(fused)
 
-    # Warstwa wyjściowa klasyfikująca emocje (softmax)
+    # Output layer with softmax activation for emotion classification
     output = layers.Dense(num_classes, activation='softmax', name='emotion_output')(fused)
 
-    # Złożenie modelu wejść i wyjść w jeden model multimodalny
+    # Assemble the full multimodal model
     model = models.Model(
         inputs=[audio_input, visual_input],
         outputs=output,

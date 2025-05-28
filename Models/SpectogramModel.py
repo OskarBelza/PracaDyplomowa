@@ -4,58 +4,58 @@ from Config.config import SPECTROGRAM_SIZE, NUM_CLASSES
 
 def build_audio_model(input_shape=(SPECTROGRAM_SIZE, SPECTROGRAM_SIZE, 3)):
     """
-    Buduje model bazowy przetwarzający spektrogramy audio jako obrazy wejściowe.
-    Model składa się z trzech bloków Conv2D + MaxPooling, a następnie warstwy gęstej z dropoutem.
+    Builds a base CNN model that processes audio spectrograms as input images.
+    The model consists of three Conv2D + MaxPooling blocks, followed by a dense layer with dropout.
 
-    Parametry:
-        input_shape (tuple): Rozmiar wejściowych spektrogramów (domyślnie RGB).
+    Parameters:
+        input_shape (tuple): Shape of the input spectrogram images (default is RGB format).
 
-    Zwraca:
-        tf.keras.Model: Model ekstrakcji cech z modalności audio.
+    Returns:
+        tf.keras.Model: Feature extraction model for the audio modality.
     """
 
-    # Wejście: spektrogram audio w postaci obrazu
+    # Input: audio spectrogram represented as an image
     inputs = layers.Input(shape=input_shape, name='audio_input')
 
-    # Blok konwolucyjny 1
+    # Convolutional Block 1
     x = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(inputs)
     x = layers.MaxPooling2D((2, 2))(x)
 
-    # Blok konwolucyjny 2
+    # Convolutional Block 2
     x = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(x)
     x = layers.MaxPooling2D((2, 2))(x)
 
-    # Blok konwolucyjny 3
+    # Convolutional Block 3
     x = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(x)
     x = layers.MaxPooling2D((2, 2))(x)
 
-    # Spłaszczenie i warstwa w pełni połączona
+    # Flatten and fully connected layer
     x = layers.Flatten()(x)
     x = layers.Dense(128, activation='relu')(x)
     x = layers.Dropout(0.3)(x)
 
-    # Zwracamy model jako ekstraktor cech z danych audio
+    # Return the model as a feature extractor
     return models.Model(inputs, x, name="AudioBranch")
 
 
 def build_audio_classifier():
     """
-    Tworzy pełny model klasyfikacji emocji na podstawie danych audio.
-    Wykorzystuje bazowy model ekstrakcji cech i dodaje końcową warstwę softmax.
+    Builds a full audio-based emotion classification model.
+    It uses the base feature extractor and adds a softmax classification head.
 
-    Zwraca:
-        tf.keras.Model: Model klasyfikacyjny dla danych akustycznych.
+    Returns:
+        tf.keras.Model: Complete classification model for audio inputs.
     """
 
-    # Bazowy model do ekstrakcji cech
+    # Base feature extraction model
     base_model = build_audio_model()
 
-    # Wejście i wyjście z modelu bazowego
+    # Input and extracted features
     inputs = base_model.input
     x = base_model.output
 
-    # Warstwa wyjściowa klasyfikująca na 6 emocji
+    # Output layer classifying into NUM_CLASSES emotions
     outputs = layers.Dense(NUM_CLASSES, activation='softmax', name='audio_output')(x)
 
-    # Złożenie końcowego modelu
+    # Assemble the final model
     return models.Model(inputs, outputs, name="AudioClassifier")

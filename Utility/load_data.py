@@ -10,9 +10,9 @@ def get_image_paths_and_labels(base_dir):
     base_dir/class_name/image.png
 
     Returns:
-        file_paths: list of image paths
-        labels: list of integer labels
-        class_names: sorted list of class names
+        file_paths (List[str]): List of image paths.
+        labels (List[int]): List of integer-encoded labels.
+        class_names (List[str]): Sorted list of emotion class names.
     """
     file_paths, labels = [], []
     class_names = sorted([
@@ -34,7 +34,7 @@ def process(face_path, spec_path, label):
     Loads and preprocesses a face image and its corresponding spectrogram.
 
     Returns:
-        A tuple ((spectrogram_tensor, face_tensor), label)
+        tuple: ((spectrogram_tensor, face_tensor), label)
     """
     face = tf.io.read_file(face_path)
     face = tf.image.decode_png(face, channels=3)
@@ -51,16 +51,16 @@ def process(face_path, spec_path, label):
 
 def build_dataset(face_paths, spec_paths, labels, shuffle=False):
     """
-    Builds a tf.data.Dataset from lists of face and spectrogram paths and labels.
+    Builds a tf.data.Dataset from lists of face image paths, spectrogram paths, and labels.
 
-    Args:
-        face_paths: list of face image file paths
-        spec_paths: list of spectrogram image file paths
-        labels: list of integer labels
-        shuffle: whether to shuffle the dataset
+    Parameters:
+        face_paths (List[str]): List of paths to face images.
+        spec_paths (List[str]): List of paths to spectrogram images.
+        labels (List[int]): List of corresponding integer labels.
+        shuffle (bool): Whether to shuffle the dataset.
 
     Returns:
-        tf.data.Dataset: batched and prefetched
+        tf.data.Dataset: Batched and prefetched dataset.
     """
     dataset = tf.data.Dataset.from_tensor_slices((face_paths, spec_paths, labels))
     dataset = dataset.map(process, num_parallel_calls=tf.data.AUTOTUNE)
@@ -71,17 +71,18 @@ def build_dataset(face_paths, spec_paths, labels, shuffle=False):
 
 def load_paired_dataset(face_dir, spec_dir, validation_split=0.15, test_split=0.15, seed=42):
     """
-    Loads and splits a paired dataset of face images and spectrograms into train/val/test.
+    Loads and splits a paired dataset of face images and spectrograms into train/val/test sets.
 
-    Args:
-        face_dir: root directory containing face images organized by class
-        spec_dir: root directory containing spectrograms mirroring face_dir structure
-        validation_split: proportion of validation samples
-        test_split: proportion of test samples
-        seed: random seed for reproducibility
+    Parameters:
+        face_dir (str): Root directory with face images organized by class.
+        spec_dir (str): Root directory with spectrograms, same structure as face_dir.
+        validation_split (float): Proportion of validation data.
+        test_split (float): Proportion of test data.
+        seed (int): Random seed for reproducibility.
 
     Returns:
-        train_dataset, val_dataset, test_dataset, class_names
+        Tuple[tf.data.Dataset]: train_dataset, val_dataset, test_dataset
+        List[str]: class_names
     """
     face_paths, labels, class_names = get_image_paths_and_labels(face_dir)
     spec_paths = [
@@ -113,9 +114,19 @@ def load_dataset_with_explicit_test_split(
     val_test_split=0.5
 ):
     """
-    Ładuje dane z katalogu w dwóch krokach:
-    1. image_dataset_from_directory z validation_split
-    2. ręczny podział zbioru walidacyjnego na walidacyjny i testowy
+    Loads image data from a directory using two steps:
+    1. Loads with validation_split.
+    2. Splits validation set into validation and test subsets.
+
+    Parameters:
+        data_dir (str): Root directory containing image data organized by class.
+        image_size (Tuple[int, int]): Target image size.
+        batch_size (int): Batch size.
+        seed (int): Random seed for reproducibility.
+        val_test_split (float): Proportion of validation data to use as validation (rest is test).
+
+    Returns:
+        Tuple[tf.data.Dataset]: train_ds, val_ds, test_ds
     """
 
     train_ds = tf.keras.utils.image_dataset_from_directory(
@@ -152,4 +163,5 @@ def load_dataset_with_explicit_test_split(
     test_ds = test_ds.map(normalize).prefetch(tf.data.AUTOTUNE)
 
     return train_ds, val_ds, test_ds
+
 
