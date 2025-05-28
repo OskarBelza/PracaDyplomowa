@@ -2,3 +2,7 @@ data/
 .venv
 __pycache__/
 .idea
+
+Outputs/
+.dat
+.keras

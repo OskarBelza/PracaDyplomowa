@@ -83,27 +83,73 @@ def load_paired_dataset(face_dir, spec_dir, validation_split=0.15, test_split=0.
     Returns:
         train_dataset, val_dataset, test_dataset, class_names
     """
-    # Load paths and labels
     face_paths, labels, class_names = get_image_paths_and_labels(face_dir)
     spec_paths = [
         os.path.join(spec_dir, os.path.relpath(fp, face_dir)) for fp in face_paths
     ]
 
-    # First, split off the test set
     face_temp, face_test, spec_temp, spec_test, labels_temp, labels_test = train_test_split(
         face_paths, spec_paths, labels, test_size=test_split, stratify=labels, random_state=seed
     )
 
-    # Then, split the remaining data into train and validation
     val_split_relative = validation_split / (1.0 - test_split)
     face_train, face_val, spec_train, spec_val, labels_train, labels_val = train_test_split(
         face_temp, spec_temp, labels_temp, test_size=val_split_relative,
         stratify=labels_temp, random_state=seed
     )
 
-    # Build datasets
     train_dataset = build_dataset(face_train, spec_train, labels_train)
     val_dataset = build_dataset(face_val, spec_val, labels_val)
     test_dataset = build_dataset(face_test, spec_test, labels_test)
 
     return train_dataset, val_dataset, test_dataset, class_names
+
+
+def load_dataset_with_explicit_test_split(
+    data_dir,
+    image_size=(128, 128),
+    batch_size=32,
+    seed=42,
+    val_test_split=0.5
+):
+    """
+    Ładuje dane z katalogu w dwóch krokach:
+    1. image_dataset_from_directory z validation_split
+    2. ręczny podział zbioru walidacyjnego na walidacyjny i testowy
+    """
+
+    train_ds = tf.keras.utils.image_dataset_from_directory(
+        data_dir,
+        validation_split=0.3,
+        subset="training",
+        seed=seed,
+        image_size=image_size,
+        batch_size=batch_size,
+        label_mode="int"
+    )
+
+    val_test_ds = tf.keras.utils.image_dataset_from_directory(
+        data_dir,
+        validation_split=0.3,
+        subset="validation",
+        seed=seed,
+        image_size=image_size,
+        batch_size=batch_size,
+        label_mode="int"
+    )
+
+    total_batches = tf.data.experimental.cardinality(val_test_ds).numpy()
+    val_batches = int(total_batches * val_test_split)
+
+    val_ds = val_test_ds.take(val_batches)
+    test_ds = val_test_ds.skip(val_batches)
+
+    def normalize(x, y):
+        return tf.cast(x, tf.float32) / 255.0, y
+
+    train_ds = train_ds.map(normalize).prefetch(tf.data.AUTOTUNE)
+    val_ds = val_ds.map(normalize).prefetch(tf.data.AUTOTUNE)
+    test_ds = test_ds.map(normalize).prefetch(tf.data.AUTOTUNE)
+
+    return train_ds, val_ds, test_ds
+

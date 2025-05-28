@@ -1,9 +1,8 @@
 from tensorflow.keras import models, layers
-from Config.config import FACE_SIZE
+from Config.config import FACE_SIZE, NUM_CLASSES
 
 
 def build_visual_model(frame_shape=(FACE_SIZE, FACE_SIZE, 3)):
-    # Wejście: pojedyncza klatka
     inputs = layers.Input(shape=frame_shape, name='video_input')
 
     x = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(inputs)
@@ -20,3 +19,11 @@ def build_visual_model(frame_shape=(FACE_SIZE, FACE_SIZE, 3)):
     x = layers.Dropout(0.3)(x)
 
     return models.Model(inputs, x, name="VisualBranch")
+
+
+def build_visual_classifier():
+    base_model = build_visual_model()
+    inputs = base_model.input
+    x = base_model.output
+    outputs = layers.Dense(NUM_CLASSES, activation='softmax', name='visual_output')(x)
+    return models.Model(inputs, outputs, name="VisualClassifier")

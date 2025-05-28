@@ -14,14 +14,11 @@ def count_files(directory):
     """
     emotion_counts = {}
 
-    # Check if directory exists
     if os.path.exists(directory):
         for emotion in os.listdir(directory):
             emotion_path = os.path.join(directory, emotion)
 
-            # Only process subdirectories
             if os.path.isdir(emotion_path):
-                # Count only PNG or NPY files
                 num_files = len([
                     f for f in os.listdir(emotion_path)
                     if f.endswith('.png') or f.endswith('.npy')
@@ -44,14 +41,12 @@ def count_images_and_spectrograms(face_dir=FACE_PATH, spec_dir=SPECTROGRAM_PATH)
     """
     summary = {}
 
-    # Count files in each directory
     face_counts = count_files(face_dir)
     spec_counts = count_files(spec_dir)
 
     total_faces = 0
     total_spectrograms = 0
 
-    # Union of all emotion categories found in either folder
     all_emotions = set(face_counts.keys()).union(set(spec_counts.keys()))
 
     for emotion in all_emotions:
@@ -60,13 +55,11 @@ def count_images_and_spectrograms(face_dir=FACE_PATH, spec_dir=SPECTROGRAM_PATH)
         total_faces += face_count
         total_spectrograms += spec_count
 
-        # Store per-class counts
         summary[emotion] = {
             "face_images": face_count,
             "spectrograms": spec_count
         }
 
-    # Add global totals to the summary
     summary["TOTAL"] = {
         "face_images": total_faces,
         "spectrograms": total_spectrograms
@@ -77,6 +70,7 @@ def count_images_and_spectrograms(face_dir=FACE_PATH, spec_dir=SPECTROGRAM_PATH)
 
 summary = count_images_and_spectrograms()
 
-# Print results in readable format
 for emotion, counts in summary.items():
     print(f"{emotion}: {counts['face_images']} face images, {counts['spectrograms']} spectrograms")
+
+

@@ -1,10 +1,24 @@
-import tensorflow as tf
 from keras.config import enable_unsafe_deserialization
+from Utility.load_data import load_paired_dataset
+from Utility.evaluate import evaluate_multimodal_model
+from Config.config import SPECTROGRAM_PATH, FACE_PATH, CLASS_DISTRIBUTION
 import matplotlib.pyplot as plt
-import numpy as np
+from sklearn.metrics import (
+    confusion_matrix,
+    ConfusionMatrixDisplay,
+)
+
+enable_unsafe_deserialization()
 
 
 def plot_class_distribution(class_distribution):
+    """
+    Funkcja wizualizuje liczność klas emocji w zbiorze danych wejściowych oddzielnie dla modalności
+    wizualnej (obrazy twarzy) i akustycznej (spektrogramy).
+
+    Parametry:
+        class_distribution (dict): słownik z licznością próbek dla każdej klasy osobno dla twarzy i dźwięku.
+    """
     labels = list(class_distribution.keys())
     face_counts = [class_distribution[label]["face"] for label in labels]
     audio_counts = [class_distribution[label]["audio"] for label in labels]
@@ -24,39 +38,40 @@ def plot_class_distribution(class_distribution):
     plt.show()
 
 
-def load_and_describe_keras_model(model_path):
-    # Włącz niebezpieczną deserializację (jeśli ufasz źródłu)
-    enable_unsafe_deserialization()
+def plot_confusion_matrix(y_true, y_pred, labels=None, normalize='true'):
+    """
+    Funkcja generuje i wyświetla macierz pomyłek na podstawie etykiet rzeczywistych i predykcji modelu.
 
-    try:
-        model = tf.keras.models.load_model(model_path)
-    except Exception as e:
-        print(f"Błąd podczas ładowania modelu: {e}")
-        return None
-
-    print(f"\n✅ Model '{model_path}' został pomyślnie załadowany.\n")
-
-    print("📐 Architektura modelu:")
-    model.summary()
-
-    print("\n🔍 Szczegóły warstw:")
-    for i, layer in enumerate(model.layers):
-        print(f"  {i+1}. Nazwa: {layer.name}")
-        print(f"     Typ: {type(layer).__name__}")
-        output_shape = getattr(layer, "output_shape", "Brak (np. InputLayer)")
-        print(f"     Wyjście: {output_shape}")
-        print(f"     Parametry: {layer.count_params()}")
-        print("")
-
-    print("⚙️ Parametry kompilacji:")
-    if model.optimizer:
-        print(f"  Optymalizator: {type(model.optimizer).__name__}")
-        print(f"  Funkcja straty: {model.loss}")
-        print(f"  Metryki: {model.metrics}")
-    else:
-        print("  Model nie został skompilowany.")
-
-    return model
+    Parametry:
+        y_true (List[int]): rzeczywiste etykiety klas.
+        y_pred (List[int]): przewidziane etykiety klas przez model.
+        labels (List[str]): lista etykiet klas do podpisania osi.
+        normalize (str): sposób normalizacji ('true' = normalizacja po wierszach).
+    """
+    cm = confusion_matrix(y_true, y_pred, normalize=normalize)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
+    disp.plot(cmap=plt.cm.Blues)
+    plt.title("Confusion Matrix")
+    plt.show()
 
 
-#model = load_and_describe_keras_model("../multimodal_model_multiplicative.keras")
+"""
+#model = tf.keras.models.load_model("../Outputs/multimodal_model_multiplicative.keras")
+
+
+train_dataset, val_dataset, test_dataset, class_names = load_paired_dataset(
+    face_dir=FACE_PATH,
+    spec_dir=SPECTROGRAM_PATH,
+    validation_split=0.15,
+    test_split=0.15,
+)
+
+
+#y_true, y_pred = evaluate_multimodal_model(model, test_dataset, class_names, output_path="../Outputs/evaluation_report.txt")
+
+#plot_confusion_matrix(y_true, y_pred, labels=class_names, normalize='true')
+#plot_class_distribution(CLASS_DISTRIBUTION)
+"""
+
+# Uncomment the above lines to run the evaluation and plotting functions"""
+plot_class_distribution(CLASS_DISTRIBUTION)

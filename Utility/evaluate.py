@@ -25,15 +25,15 @@ def evaluate_multimodal_model(model, dataset, class_names, output_path="evaluati
     balanced_acc = balanced_accuracy_score(y_true, y_pred)
     report = classification_report(y_true, y_pred, target_names=class_names)
 
-    # Print to console
     print(f'\nBalanced Accuracy:\t{balanced_acc:.4f}')
     print("\nClassification Report:")
     print(report)
 
-    # Save to file
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(f"Balanced Accuracy:\t{balanced_acc:.4f}\n\n")
         f.write("Classification Report:\n")
         f.write(report)
 
     print(f"\nEvaluation results saved to: {output_path}")
+
+    return y_true, y_pred

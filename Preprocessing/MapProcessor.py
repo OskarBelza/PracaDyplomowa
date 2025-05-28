@@ -171,7 +171,6 @@ def process_sessions(base_path, output_path, n_sessions):
             extract_values(full_path, file[:-4], output_path)
 
 
-# === MAIN EXECUTION ===
 if __name__ == "__main__":
     process_sessions(
         base_path=config.BASE_PATH,
