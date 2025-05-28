@@ -1,8 +1,11 @@
-data/
+data/*
+!data/.gitkeep
+
 .venv
 __pycache__/
 .idea
 
-Outputs/
-.dat
-.keras
+*.dat
+*.keras
+*.png
+*.txt

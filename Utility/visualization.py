@@ -1,7 +1,7 @@
 from keras.config import enable_unsafe_deserialization
 from Utility.load_data import load_paired_dataset
 from Utility.evaluate import evaluate_multimodal_model
-from Config.config import SPECTROGRAM_PATH, FACE_PATH, CLASS_DISTRIBUTION
+from Config.config import SPECTROGRAM_PATH, FACE_PATH, CLASS_DISTRIBUTION, OUTPUT_PATH
 import matplotlib.pyplot as plt
 from sklearn.metrics import (
     confusion_matrix,
@@ -11,7 +11,7 @@ from sklearn.metrics import (
 enable_unsafe_deserialization()
 
 
-def plot_class_distribution(class_distribution):
+def plot_class_distribution(class_distribution, output_path):
     """
     Funkcja wizualizuje liczność klas emocji w zbiorze danych wejściowych oddzielnie dla modalności
     wizualnej (obrazy twarzy) i akustycznej (spektrogramy).
@@ -34,11 +34,11 @@ def plot_class_distribution(class_distribution):
     plt.title("Rozkład klas emocji (twarz vs. audio)")
     plt.legend()
     plt.tight_layout()
-    plt.savefig('class_distribution.png', dpi=300)
+    plt.savefig(output_path, dpi=300)
     plt.show()
 
 
-def plot_confusion_matrix(y_true, y_pred, labels=None, normalize='true'):
+def plot_confusion_matrix(y_true, y_pred, output_path, labels=None, normalize='true'):
     """
     Funkcja generuje i wyświetla macierz pomyłek na podstawie etykiet rzeczywistych i predykcji modelu.
 
@@ -52,6 +52,7 @@ def plot_confusion_matrix(y_true, y_pred, labels=None, normalize='true'):
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
     disp.plot(cmap=plt.cm.Blues)
     plt.title("Confusion Matrix")
+    plt.savefig(output_path, dpi=300)
     plt.show()
 
 
@@ -69,7 +70,7 @@ train_dataset, val_dataset, test_dataset, class_names = load_paired_dataset(
 
 #y_true, y_pred = evaluate_multimodal_model(model, test_dataset, class_names, output_path="../Outputs/evaluation_report.txt")
 
-#plot_confusion_matrix(y_true, y_pred, labels=class_names, normalize='true')
+#plot_confusion_matrix(y_true, y_pred,output_path=f"{OUTPUT_PATH}/confusion_matrix.png", labels=class_names, normalize='true')
 #plot_class_distribution(CLASS_DISTRIBUTION)
 """
 
