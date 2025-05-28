@@ -74,4 +74,3 @@ train_dataset, val_dataset, test_dataset, class_names = load_paired_dataset(
 """
 
 # Uncomment the above lines to run the evaluation and plotting functions"""
-plot_class_distribution(CLASS_DISTRIBUTION)
